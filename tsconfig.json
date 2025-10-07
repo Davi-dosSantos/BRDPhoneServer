@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",           
+    "target": "es2020",               
+    "esModuleInterop": true,       
+    "moduleResolution": "node",       
+    "resolveJsonModule": true,       
+    "outDir": "./dist",              
+
+    "lib": ["es2020"],
+    "types": ["node"],
+    "strict": true,                   
+    
+    "verbatimModuleSyntax": false,    
+    "isolatedModules": false,         
+    "noUncheckedSideEffectImports": false, 
+
+    "noFallthroughCasesInSwitch": true, 
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+  }
+}
