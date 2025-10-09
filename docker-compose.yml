@@ -1,0 +1,45 @@
+services:
+  # Serviço 1: Seu Backend Node.js
+  app:
+    # Usa o Dockerfile que acabamos de criar na pasta atual
+    build: . 
+    container_name: fcm_node_app
+    restart: always
+    # Mapeia a porta do container (3000) para a porta da sua máquina
+    ports:
+      - "3000:3000"
+    # Carrega as variáveis de ambiente (como a chave do Firebase)
+    env_file:
+      - .env
+    # Define a dependência: a aplicação só deve iniciar APÓS o MySQL estar pronto
+    depends_on:
+      - db
+    # Mapeamento do Prisma: Garante que os arquivos gerados no build 
+    # sejam acessíveis pelo cliente Node.js
+    volumes:
+      - /app/node_modules # Evita sobrescrever node_modules
+      - ./prisma/schema.prisma:/app/prisma/schema.prisma # Mapeia o esquema
+      # Se você usar volume para o .env no Dockerfile, retire esta linha:
+      # - ./.env:/app/.env 
+
+  # Serviço 2: O Banco de Dados MySQL
+  db:
+    image: mysql:8.0
+    container_name: fcm_mysql_db
+    restart: always
+    # Variáveis cruciais para configurar o MySQL
+    environment:
+      # Defina sua nova senha ROOT AQUI
+      MYSQL_ROOT_PASSWORD: MINHA_SENHA_FORTE_AQUI 
+      # Define o banco de dados que o Node vai usar
+      MYSQL_DATABASE: fcm_db
+    # Mapeamento de volume: Essencial para manter seus dados mesmo se o container for destruído
+    volumes:
+      - db_data:/var/lib/mysql
+    # Mapeia a porta 3306 para debug externo (opcional)
+    ports:
+      - "3306:3306"
+
+# Define o volume para persistir os dados do MySQL
+volumes:
+  db_data:

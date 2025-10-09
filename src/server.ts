@@ -1,13 +1,24 @@
 import express from 'express';
 import * as admin from 'firebase-admin';
-import dbUpdateRouter from './routes/dbUpdate.routes';
+import createRouter from './routes/create.routes';
+import updateRouter from './routes/update.routes';
+import checkUserExistenceRouter from './routes/checkUserExistsInDB.routes';
 import firebaseDataPushRouter from './routes/firebaseDataPush.routes';
-const serviceAccountString = process.env.FIREBASE_ADMIN_CREDENTIALS;
+import path from 'path';
 
-if (!serviceAccountString) {
-    throw new Error("A variável de ambiente FIREBASE_ADMIN_CREDENTIALS não está definida.");
+
+const SERVICE_ACCOUNT_FILE = 'serviceAccountKey.json';
+const serviceAccountPath = path.resolve(__dirname, '..', SERVICE_ACCOUNT_FILE);
+
+
+let serviceAccount: admin.ServiceAccount;
+try {
+  serviceAccount = require(serviceAccountPath) as admin.ServiceAccount;
+} catch (error) {
+  console.error(`[ERRO DE INICIALIZAÇÃO] Não foi possível carregar o arquivo de credenciais Firebase em: ${serviceAccountPath}`);
+  console.error("Verifique se o arquivo JSON da conta de serviço existe na raiz do projeto e se chama: serviceAccountKey.json");
+  throw new Error("Falha ao carregar credenciais do Firebase Admin SDK.");
 }
-const serviceAccount = JSON.parse(serviceAccountString) as admin.ServiceAccount;
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -18,7 +29,9 @@ const PORT = 3000;
 
 app.use(express.json());
 
-app.use('/dbUpdate', dbUpdateRouter);         
+app.use('/user/exists', checkUserExistenceRouter);
+app.use('/user/create', createRouter);
+app.use('/user/update', updateRouter);         
 app.use('/firebaseDataPush', firebaseDataPushRouter); 
 
 app.listen(PORT, () => {
