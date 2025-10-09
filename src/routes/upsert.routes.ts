@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { updateTokenInDB } from '../services/db.service';
-import { RegisterTokenRequest } from './create.routes';
+import { upsertTokenInDB } from '../services/db.service';
+
+interface RegisterTokenRequest extends Request {
+  body: {
+    userID_Domain: string;
+    token: string;
+    platform: 'Android' | 'IOS';
+  };
+}
 
 const router = Router();
 
@@ -12,7 +19,7 @@ router.post('/', async (req: RegisterTokenRequest, res: Response) => {
     }
   
     try {
-        await updateTokenInDB(userID_Domain, token, platform); 
+        await upsertTokenInDB(userID_Domain, token, platform); 
         res.status(200).send({ success: true, message: `Token atualizado para ${userID_Domain} (DB).` });
     } catch (dbError) {
         console.error(`[ERRO DB] Falha ao atualizar o token para ${userID_Domain}:`, dbError);

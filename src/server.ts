@@ -1,7 +1,7 @@
 import express from 'express';
 import * as admin from 'firebase-admin';
 import createRouter from './routes/create.routes';
-import updateRouter from './routes/update.routes';
+import upsertRouter from './routes/upsert.routes';
 import checkUserExistenceRouter from './routes/checkUserExistsInDB.routes';
 import firebaseDataPushRouter from './routes/firebaseDataPush.routes';
 import path from 'path';
@@ -31,7 +31,7 @@ app.use(express.json());
 
 app.use('/user/exists', checkUserExistenceRouter);
 app.use('/user/create', createRouter);
-app.use('/user/update', updateRouter);         
+app.use('/user/upsert', upsertRouter);         
 app.use('/firebaseDataPush', firebaseDataPushRouter); 
 
 app.listen(PORT, () => {

@@ -25,7 +25,7 @@ export async function createTokenInDB(userID_Domain: string, token: string, plat
 }
 
 
-export async function updateTokenInDB(userID_Domain: string, token: string, platform: 'Android' | 'IOS'): Promise<void> {
+export async function upsertTokenInDB(userID_Domain: string, token: string, platform: 'Android' | 'IOS'): Promise<void> {
     try {
         await prisma.fcmToken.upsert({
             where: { userID_Domain: userID_Domain },
