@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import * as admin from 'firebase-admin';
 import { FirebaseError } from 'firebase-admin';
-import { getActiveTokensFromDB, deactivateTokenInDB, FCMToken } from '../services/db.service'; 
+import { getActiveTokensFromDB, FCMToken } from '../services/db.service'; 
 import { Platform } from '@prisma/client'; 
 const router = Router();
 
@@ -122,14 +122,14 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
     });
     
     // desativação de tokens em lote
-    if (tokensToDeactivate.length > 0) {
-        console.log(`Iniciando desativação de ${tokensToDeactivate.length} tokens inválidos.`);
-        tokensToDeactivate.forEach(({ token, platform }) => {
-            deactivateTokenInDB(token, platform).catch(dbErr => { 
-                console.error(`[ERRO DB] Falha ao desativar token ${token}/${platform}:`, dbErr);
-            });
-        });
-    }
+    //if (tokensToDeactivate.length > 0) {
+    //    console.log(`Iniciando desativação de ${tokensToDeactivate.length} tokens inválidos.`);
+    //    tokensToDeactivate.forEach(({ token, platform }) => {
+    //        deactivateTokenInDB(token).catch(dbErr => { 
+    //            console.error(`[ERRO DB] Falha ao desativar token ${token}/${platform}:`, dbErr);
+    //        });
+    //    });
+    //}
 
     // Resposta 
     if (successCount > 0) {

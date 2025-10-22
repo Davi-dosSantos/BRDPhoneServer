@@ -66,25 +66,22 @@ export async function checkUserTokensExist(userID_Domain: string): Promise<boole
     }
 }
 
-export async function deactivateTokenInDB(userID_Domain: string, platform: Platform): Promise<void> {
-    try {
-        await prisma.fcmToken.update({
-            where: {
-                userID_Domain_platform: {
-                    userID_Domain: userID_Domain,
-                    platform: platform,
-                },
-            },
-            data: {
-                isActive: false, 
-            },
-        });
-        console.warn(`[PRISMA SUCESSO] Token desativado para ${userID_Domain}/${platform}.`);
-    } catch (error) {
-        console.error(`[PRISMA ERRO] Falha ao desativar token para ${userID_Domain}:`, error);
-        throw new Error("Falha ao desativar o token no DB.");
-    }
-}
+//export async function deactivateTokenInDB(token: string): Promise<void> {
+//    try {
+//       await prisma.fcmToken.update({
+//            where: {
+//                    token: token,
+//            },
+//            data: {
+//                isActive: false, 
+//            },
+//        });
+//        console.warn(`[PRISMA SUCESSO] Tokens desativado com sucesso.`);
+//    } catch (error) {
+//       console.error(`[PRISMA ERRO] Falha ao desativar token ${token}:`, error);
+//        throw new Error("Falha ao desativar o token no DB.");
+//    }
+//}
 
 export async function deleteTokensForUser(userID_Domain: string): Promise<void> {
     try {
