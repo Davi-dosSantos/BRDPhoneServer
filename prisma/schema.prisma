@@ -5,15 +5,20 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 
 model fcmToken{
-  userID_Domain   String @db.VarChar(255)    @id
-  token String @db.VarChar(255)
-  platform     Platform
+  userID_Domain    String @db.VarChar(255)   
+  token            String @db.VarChar(255)
+  platform         Platform
+  updatedAt        DateTime @default(now()) @updatedAt
+  isActive         Boolean  @default(true)
+  @@id([userID_Domain, platform])
 }
 
 enum Platform {
   IOS
   Android
+  Extension
 }

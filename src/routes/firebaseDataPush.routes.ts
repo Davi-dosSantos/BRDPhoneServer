@@ -1,14 +1,24 @@
 import { Router, Request, Response } from 'express';
 import * as admin from 'firebase-admin';
-import { getTokenFromDB } from '../services/db.service';
-
+import { FirebaseError } from 'firebase-admin';
+import { getActiveTokensFromDB, deactivateTokenInDB, FCMToken } from '../services/db.service'; 
+import { Platform } from '@prisma/client'; 
 const router = Router();
 
 interface NotifyCallRequest extends Request {
-  body: {
-    userID_destino: string;
-    userID_origem: string;
-  };
+    body: {
+        userID_destino: string;
+        userID_origem: string;
+    };
+}
+
+interface PushResult {
+    token: string;
+    platform: Platform; 
+    status: boolean;
+    messageId?: string;
+    errorCode?: string;
+    errorMessage?: string;
 }
 
 router.post('/', async (req: NotifyCallRequest, res: Response) => {
@@ -21,57 +31,119 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
     if (userID_destino === userID_origem) {
         return res.status(400).send({ error: "userID_destino e userID_origem não podem ser iguais." });
     }
-    let recipient;
+
+    let activeTokens: FCMToken[] = [];
     try {
-        recipient = await getTokenFromDB(userID_destino);
+        activeTokens = await getActiveTokensFromDB(userID_destino);
     } catch (dbError) {
-        return res.status(500).send({ error: "Falha interna ao buscar o token." });
+        console.error(`[ERRO DB] Falha ao buscar tokens para ${userID_destino}:`, dbError);
+        return res.status(500).send({ error: "Falha interna ao buscar tokens no DB." });
     }
 
-    if (!recipient) {
-        console.warn(`[AVISO] Token para ${userID_destino} não encontrado no DB. Push ignorado.`);
-        return res.status(404).send({ error: "Token FCM para o UserID de destino não encontrado no DB." });
+    if (activeTokens.length === 0) {
+        console.warn(`[AVISO] Nenhum token ativo encontrado para ${userID_destino}. Push ignorado.`);
+        return res.status(404).send({ error: "Nenhum token FCM ativo encontrado para o UserID de destino." });
     }
-    
-    const { token, platform } = recipient;
 
+    // --- Preparação e Envio de Mensagens em Lote ---
+    const sendPromises: Promise<string>[] = [];
 
-    let message: admin.messaging.Message = {
-        token: token
-    };
-    
-    
-    if (platform === 'Android') {
-        message.android = {
-            directBootOk: true,
-            priority: 'high',
-            ttl: 25000 
-        };
-    } else if (platform === 'IOS') {
-        message.apns = {
-            headers: {
-                'apns-priority': '10', 
-                'apns-expiration': (Date.now() / 1000 + 25).toString(), 
-            },
-            payload: {
-                aps: {
-                    contentAvailable: true 
-                }
+    for (const recipient of activeTokens) {
+        const { token, platform } = recipient; 
+        
+        let message: admin.messaging.Message = {
+            token: token,
+            data: {
+                caller_id: userID_origem, 
+                target_id: userID_destino,
+                type: 'INCOMING_CALL' 
             }
         };
+
+        if (platform === Platform.Android || platform === Platform.Extension) {
+            message.android = { directBootOk: true, priority: 'high', ttl: 25000 };
+        } else if (platform === Platform.IOS) {
+            message.apns = {
+                headers: { 'apns-priority': '10', 'apns-expiration': (Date.now() / 1000 + 25).toString() },
+                payload: { aps: { contentAvailable: true, alert: { title: 'Nova Chamada', body: `Chamada de ${userID_origem}` } } }
+            };
+        }
+        
+        sendPromises.push(admin.messaging().send(message));
     }
 
-    try {
-        const response = await admin.messaging().send(message);
-        console.log(`[PUSH SUCESSO] Notificação (${platform}) enviada para ${userID_destino}. ID Firebase: ${response}`);
-        res.status(200).send({ success: true, message: "Notificação FCM enviada com sucesso." });
-        console.log(message);
-    } catch (error: unknown) {
-        const firebaseError = error as { code?: string };
 
-        console.error(`[ERRO FCM] Falha ao enviar para ${userID_destino}:`, firebaseError.code);
 
-        res.status(500).send({ error: `Falha no envio do FCM: ${firebaseError.code}` });
+    const results = await Promise.allSettled(sendPromises);
+    
+    const detailedResults: PushResult[] = [];
+    let tokensToDeactivate: { token: string, platform: Platform }[] = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    results.forEach((result, index) => {
+        const tokenData = activeTokens[index];
+        if (!tokenData) {
+            console.error(`[ERRO INTERNO] Token ausente no array ativo para índice ${index}.`);
+            return; 
+        }
+        const { token, platform  } = tokenData; 
+
+        if (result.status === 'fulfilled') {
+            successCount++;
+            detailedResults.push({
+                token: token,
+                platform: platform,
+                status: true,
+                messageId: result.value 
+            });
+            console.log(`[PUSH SUCESSO] Notificação (${platform}) enviada para ${userID_destino}. ID Firebase: ${result.value}`);
+        } else {
+            errorCount++;
+            const error = result.reason as FirebaseError; 
+            const errorCode = error?.code || 'UNKNOWN_ERROR';
+            const errorMessage = error?.message || 'Erro de envio desconhecido.';
+            
+            detailedResults.push({
+                token: token,
+                platform: platform,
+                status: false,
+                errorCode: errorCode,
+                errorMessage: errorMessage
+            });
+            
+            console.error(`[ERRO FCM] Falha ao enviar para ${userID_destino}/${platform}: Código: ${errorCode}, Mensagem: ${errorMessage}`);
+
+            //Marcar token para desativação ---
+            if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-argument') {
+                tokensToDeactivate.push({ token, platform });
+            }
+        }
+    });
+    
+    // desativação de tokens em lote
+    if (tokensToDeactivate.length > 0) {
+        console.log(`Iniciando desativação de ${tokensToDeactivate.length} tokens inválidos.`);
+        tokensToDeactivate.forEach(({ token, platform }) => {
+            deactivateTokenInDB(token, platform).catch(dbErr => { 
+                console.error(`[ERRO DB] Falha ao desativar token ${token}/${platform}:`, dbErr);
+            });
+        });
+    }
+
+    // Resposta 
+    if (successCount > 0) {
+        res.status(200).send({ 
+            success: true, 
+            message: `Notificação processada. Sucessos: ${successCount}, Falhas: ${errorCount}.`,
+            results: detailedResults 
+        });
+    } else {
+        res.status(500).send({ 
+            success: false, 
+            message: `Falha ao enviar notificação para todos os dispositivos. Total de falhas: ${errorCount}.`,
+            results: detailedResults 
+        });
     }
 });
 

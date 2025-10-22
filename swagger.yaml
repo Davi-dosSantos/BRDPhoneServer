@@ -1,0 +1,235 @@
+openapi: 3.0.0
+info:
+  title: BRD Phone FCM Middleware API
+  description: API para registro de tokens Firebase Cloud Messaging (FCM), gestão de usuários com múltiplos dispositivos e disparo de notificações PUSH.
+  version: 1.0.0
+servers:
+  - url: http://168.121.7.18:3000
+    description: Servidor Local de Desenvolvimento
+tags:
+  - name: Gestão de Dispositivos (CRUD)
+    description: Operações de Criação, Atualização e Deleção de Tokens por Dispositivo.
+  - name: Consulta de Usuário
+    description: Verificação de existência e listagem de dispositivos ativos.
+  - name: FCM Push
+    description: Disparo de notificação de chamada PUSH para todos os dispositivos ativos.
+paths:
+  /user/upsert:
+    post:
+      tags:
+        - Gestão de Dispositivos (CRUD)
+      summary: Cria ou atualiza o Token FCM para um dispositivo específico.
+      description: |
+        Persiste o token FCM para um usuário e plataforma específicos, reativando o token (isActive=TRUE) e atualizando o timestamp se já existir. Esta rota trata do ciclo de vida do token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userID_Domain
+                - token
+                - platform
+              properties:
+                userID_Domain:
+                  type: string
+                  description: ID do usuário (geralmente no formato SIP).
+                  example: sip:31028@pabx08.brdtestes.com.br
+                token:
+                  type: string
+                  description: Token de registro do Firebase (FCM Token).
+                  example: dQUf4e9_RbuDcZ2BAXARTu:APA91b...
+                platform:
+                  type: string
+                  enum: [Android, IOS, Extension] 
+                  description: Tipo de plataforma do dispositivo.
+                  example: Extension
+      responses:
+        '200':
+          description: Token persistido/atualizado com sucesso (isActive redefinido para TRUE).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Token atualizado/registrado para sip:123124@pabx04.brdtestes.com.br (Extension).
+        '400':
+          description: Requisição inválida (parâmetros obrigatórios ausentes ou enum inválido).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userID_Domain, Token FCM e platform são obrigatórios.
+
+  /user/delete:
+    delete:
+      tags:
+        - Gestão de Dispositivos (CRUD)
+      summary: Deleta TODOS os tokens FCM de um usuário.
+      description: Remove **todos** os tokens FCM (múltiplos dispositivos) associados a um único userID_Domain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userID_Domain
+              properties:
+                userID_Domain:
+                  type: string
+                  description: ID do usuário cujos tokens serão removidos.
+                  example: sip:123124@pabx04.brdtestes.com.br
+      responses:
+        '200':
+          description: Usuário e todos os tokens deletados com sucesso (ou se não existirem).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Todos os tokens para sip:123124@pabx04.brdtestes.com.br removidos do DB.
+        '400':
+          description: Requisição inválida.
+        '500':
+          description: Falha interna ao tentar deletar os tokens no DB.
+
+  /user/tokens: 
+    post:
+      tags:
+        - Consulta de Usuário
+      summary: Retorna todos os dispositivos e tokens ativos de um usuário.
+      description: Verifica a existência de um usuário e retorna uma lista detalhada de todos os tokens FCM (dispositivos) ativos e suas plataformas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userID_Domain
+              properties:
+                userID_Domain:
+                  type: string
+                  description: ID do usuário a ser verificado.
+                  example: sip:123124@pabx04.brdtestes.com.br
+      responses:
+        '200':
+          description: Usuário encontrado. Retorna a lista de dispositivos ativos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                    example: true
+                  userID:
+                    type: string
+                    example: sip:123124@pabx04.brdtestes.com.br
+                  message:
+                    type: string
+                    example: Encontrados 2 dispositivo(s) ativo(s).
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        token:
+                          type: string
+                          description: Token FCM completo.
+                        platform:
+                          type: string
+                          enum: [Android, IOS, Extension]
+                        last_active:
+                          type: string
+                          format: date-time
+                          description: Última atualização do token (updatedAt).
+                    example:
+                      - token: dQUf4e9_RbuDcZ2BAXARTu:APA91b...
+                        platform: Android
+                        last_active: "2025-10-21T18:00:00.000Z"
+                      - token: aBcXyZ_123456...
+                        platform: Extension
+                        last_active: "2025-10-21T17:55:00.000Z"
+        '404':
+          description: Nenhum token ativo encontrado para o usuário.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: O usuário sip:123124@pabx04.brdtestes.com.br não tem tokens ativos no DB.
+                  devices:
+                    type: array
+                    example: []
+        '400':
+          description: Requisição inválida.
+
+/firebaseDataPush:
+    post:
+      tags:
+        - FCM Push
+      summary: Dispara uma notificação de chamada PUSH para TODOS os dispositivos de um usuário.
+      description: |
+        Busca TODOS os Tokens FCM ativos do `userID_destino` e envia uma notificação PUSH de alta prioridade (silent/VOIP) para cada dispositivo encontrado. 
+        A rota executa a limpeza reativa (desativa tokens expirados/inválidos no DB) e retorna um relatório detalhado por token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userID_destino
+                - userID_origem
+              properties:
+                userID_destino:
+                  type: string
+                  description: ID do usuário que deve receber a notificação PUSH (destino da chamada).
+                  example: sip:123124@pabx04.brdtestes.com.br
+                userID_origem:
+                  type: string
+                  description: ID do usuário que originou a chamada (usado para contexto na notificação).
+                  example: sip:13124@pabx04.brdtestes.com.br
+      responses:
+        '200':
+          description: Sucesso no envio para pelo menos um dispositivo. Retorna o relatório detalhado de todos os tokens processados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Notificação processada. Sucessos: 2, Falhas: 1.
+                  results:
+                    type: array
+                    description: Array detalhado com o status de processamento de cada Token FCM.
+                    items:
+                      type: object
+                      properties:
+                        token:
+                          type: string

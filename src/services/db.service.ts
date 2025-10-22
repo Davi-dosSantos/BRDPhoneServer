@@ -1,88 +1,99 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Platform } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export interface FcmRecipient {
+export interface FCMToken {
     userID_Domain: string;
     token: string;
-    platform: 'Android' | 'IOS';
-}
-export async function createTokenInDB(userID_Domain: string, token: string, platform: 'Android' | 'IOS'): Promise<void> {
-
-    try {
-        await prisma.fcmToken.create({
-            data: {
-                userID_Domain: userID_Domain,
-                token: token,
-                platform: platform
-            }
-        });
-        console.log(`[PRISMA SUCESSO] Token para ${userID_Domain} criado.`);
-    } catch (error) {
-        console.error(`[PRISMA ERRO] Falha ao criar token para ${userID_Domain}:`, error);
-        throw new Error("Falha ao persistir o token no DB.");
-    }
+    platform: Platform;
+    isActive: boolean;
+    updatedAt: Date;
 }
 
-
-export async function upsertTokenInDB(userID_Domain: string, token: string, platform: 'Android' | 'IOS'): Promise<void> {
+export async function upsertTokenInDB(userID_Domain: string, token: string, platform: Platform): Promise<void> {
     try {
         await prisma.fcmToken.upsert({
-            where: { userID_Domain: userID_Domain },
-            update: { token: token, platform: platform },
-            create: { userID_Domain: userID_Domain, token: token, platform: platform },
+            where: {
+                userID_Domain_platform: {
+                    userID_Domain: userID_Domain,
+                    platform: platform,
+                },
+            },
+            update: {
+                token: token,
+                isActive: true,
+            },
+            create: {
+                userID_Domain: userID_Domain,
+                token: token,
+                platform: platform,
+                isActive: true, 
+            },
         });
-        console.log(`[PRISMA SUCESSO] Token para ${userID_Domain} upserted.`);
+        console.log(`[PRISMA SUCESSO] Token para ${userID_Domain}/${platform} upserted.`);
     } catch (error) {
         console.error(`[PRISMA ERRO] Falha ao upsert token para ${userID_Domain}:`, error);
         throw new Error("Falha ao persistir o token no DB.");
     }
 }
 
-export async function getTokenFromDB(userID_Domain: string): Promise<FcmRecipient | undefined> {
+export async function getActiveTokensFromDB(userID_Domain: string): Promise<FCMToken[]> {
     try {
-        const record = await prisma.fcmToken.findUnique({
-            where: { userID_Domain: userID_Domain },
-            select: { token: true, platform: true }
-        });
-        
-        if (record && record.token && record.platform) {
-             return {
+        const records = await prisma.fcmToken.findMany({
+            where: {
                 userID_Domain: userID_Domain,
-                token: record.token,
-                platform: record.platform as 'Android' | 'IOS'
-             };
-        }
-        return undefined;
+                isActive: true, 
+            },
+        });
+        return records as unknown as FCMToken[];
     } catch (error) {
-        console.error(`[PRISMA ERRO] Falha ao buscar token para ${userID_Domain}:`, error);
-        throw new Error("Falha ao buscar o token no DB.");
+        console.error(`[PRISMA ERRO] Falha ao buscar tokens ativos para ${userID_Domain}:`, error);
+        throw new Error("Falha ao buscar tokens ativos no DB.");
     }
 }
 
-export async function checkUserExistsInDB(userID_Domain: string): Promise<boolean> {
+
+
+export async function checkUserTokensExist(userID_Domain: string): Promise<boolean> {
     try {
-        const record = await prisma.fcmToken.findUnique({
+        const count = await prisma.fcmToken.count({
             where: { userID_Domain: userID_Domain },
-            select: { userID_Domain: true }
         });
-        
-        return record !== null;
+        return count > 0;
     } catch (error) {
         console.error(`[PRISMA ERRO] Falha ao verificar existência para ${userID_Domain}:`, error);
         throw new Error("Falha ao verificar a existência do usuário no DB.");
     }
 }
 
+export async function deactivateTokenInDB(userID_Domain: string, platform: Platform): Promise<void> {
+    try {
+        await prisma.fcmToken.update({
+            where: {
+                userID_Domain_platform: {
+                    userID_Domain: userID_Domain,
+                    platform: platform,
+                },
+            },
+            data: {
+                isActive: false, 
+            },
+        });
+        console.warn(`[PRISMA SUCESSO] Token desativado para ${userID_Domain}/${platform}.`);
+    } catch (error) {
+        console.error(`[PRISMA ERRO] Falha ao desativar token para ${userID_Domain}:`, error);
+        throw new Error("Falha ao desativar o token no DB.");
+    }
+}
 
-// export async function deleteTokenFromDB(userID_Domain: string): Promise<void> {
-//     try {
-//         await prisma.fcmToken.delete({
-//             where: { userID_Domain: userID_Domain },
-//         });
-//         console.warn(`[PRISMA SUCESSO] Token inválido para ${userID_Domain} removido do DB.`);
-//     } catch (error) {
-//         console.error(`[PRISMA ERRO] Falha ao remover token para ${userID_Domain}:`, error);
-//         throw new Error("Falha ao remover o token do DB.");
-//     }
-// }
+export async function deleteTokensForUser(userID_Domain: string): Promise<void> {
+    try {
+        await prisma.fcmToken.deleteMany({
+            where: { userID_Domain: userID_Domain },
+        });
+        console.warn(`[PRISMA SUCESSO] Todos os tokens para ${userID_Domain} removidos.`);
+    } catch (error) {
+        console.error(`[PRISMA ERRO] Falha ao remover tokens para ${userID_Domain}:`, error);
+        throw new Error("Falha ao remover tokens do user do DB.");
+    }
+}

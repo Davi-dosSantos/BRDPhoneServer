@@ -1,11 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { upsertTokenInDB } from '../services/db.service';
+import { Platform } from '@prisma/client';
 
 interface RegisterTokenRequest extends Request {
   body: {
     userID_Domain: string;
     token: string;
-    platform: 'Android' | 'IOS';
+    platform: Platform;
+    updatedAt: Date;
+    isActive: boolean;
   };
 }
 
