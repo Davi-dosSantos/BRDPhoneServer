@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { deleteTokensForUser } from '../services/db.service';
+import { getCurrentTimestamp } from '../utils/date';
+
 const router = Router();
+const timeStamp = getCurrentTimestamp();
 
 export interface DeleteTokenRequest extends Request {
   body: {
@@ -17,9 +20,9 @@ router.delete('/', async (req: DeleteTokenRequest, res: Response) => {
   
     try {
         await deleteTokensForUser(userID_Domain); 
-        res.status(200).send({ success: true, message: `User ${userID_Domain} deletado com sucesso (DB).` });
+        res.status(200).send({ success: true, message: `${timeStamp} User ${userID_Domain} deletado com sucesso (DB).` });
     } catch (dbError) {
-        console.error(`[ERRO DB] Falha ao deletar ${userID_Domain}:`, dbError);
+        console.error(`${timeStamp} [ERRO DB] Falha ao deletar ${userID_Domain}:`, dbError);
         res.status(500).send({ error: "Falha interna ao deletar no DB." });
     }
 });

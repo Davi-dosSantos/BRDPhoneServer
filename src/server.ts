@@ -4,6 +4,7 @@ import upsertRouter from './routes/upsert.routes';
 import deleteRouter from './routes/delete.routes';
 import checkUserExistenceRouter from './routes/checkUserExistsInDB.routes';
 import firebaseDataPushRouter from './routes/firebaseDataPush.routes';
+import deleteEspecificTokenRouter from './routes/deleteEspecificToken.routes';
 import path from 'path';
 
 import swaggerUi from 'swagger-ui-express';
@@ -34,13 +35,19 @@ const PORT = 3000;
 app.use(express.json());
 
 
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
-app.use('/user/exists', checkUserExistenceRouter);
+app.use('/user/tokens', checkUserExistenceRouter);
 app.use('/user/delete', deleteRouter);
-app.use('/user/upsert', upsertRouter);         
+app.use('/user/upsert', upsertRouter);     
+app.use('/user/deleteEspecificToken', deleteEspecificTokenRouter);    
 app.use('/firebaseDataPush', firebaseDataPushRouter); 
+
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Desabilita o Swagger UI quando em produção
+// if (process.env.NODE_ENV !== 'production') {
+// app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// }
 
 app.listen(PORT, () => {
   console.log(`Middleware FCM rodando e escutando na porta ${PORT}`);
-  console.log(`Documentação Swagger disponível em http://168.121.7.18:${PORT}/docs`);
+  console.log(`Documentação Swagger de desenvolvimento disponível em http://168.121.7.18:${PORT}/docs`);
 });

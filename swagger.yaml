@@ -7,7 +7,7 @@ servers:
   - url: http://168.121.7.18:3000
     description: Servidor Local de Desenvolvimento
 tags:
-  - name: Gestão de Dispositivos (CRUD)
+  - name: Gestão de Dispositivos
     description: Operações de Criação, Atualização e Deleção de Tokens por Dispositivo.
   - name: Consulta de Usuário
     description: Verificação de existência e listagem de dispositivos ativos.
@@ -17,7 +17,7 @@ paths:
   /user/upsert:
     post:
       tags:
-        - Gestão de Dispositivos (CRUD)
+        - Gestão de Dispositivos
       summary: Cria ou atualiza o Token FCM para um dispositivo específico.
       description: |
         Persiste o token FCM para um usuário e plataforma específicos, reativando o token (isActive=TRUE) e atualizando o timestamp se já existir. Esta rota trata do ciclo de vida do token.
@@ -35,7 +35,7 @@ paths:
                 userID_Domain:
                   type: string
                   description: ID do usuário (geralmente no formato SIP).
-                  example: sip:31028@pabx08.brdtestes.com.br
+                  example: sip:123124@pabx04.brdtestes.com.br
                 token:
                   type: string
                   description: Token de registro do Firebase (FCM Token).
@@ -73,7 +73,7 @@ paths:
   /user/delete:
     delete:
       tags:
-        - Gestão de Dispositivos (CRUD)
+        - Gestão de Dispositivos
       summary: Deleta TODOS os tokens FCM de um usuário.
       description: Remove **todos** os tokens FCM (múltiplos dispositivos) associados a um único userID_Domain.
       requestBody:
@@ -107,6 +107,51 @@ paths:
           description: Requisição inválida.
         '500':
           description: Falha interna ao tentar deletar os tokens no DB.
+
+  /user/deleteEspecificToken:
+    delete:
+      tags:
+        - Gestão de Dispositivos
+      summary: Deleta token de dispositivo específico de um usuário.
+      description: Remove o token de um dispositivo especifico associado a um userID_Domain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userID_Domain
+                - platform
+              properties:
+                userID_Domain:
+                  type: string
+                  description: ID do usuário cujos tokens serão removidos.
+                  example: sip:123124@pabx04.brdtestes.com.br
+                platform:
+                  enum: [Android, IOS, Extension]
+                  description: Plataforma do dispositivo cujo token será removido. 
+                  example: Extension
+
+      responses:
+        '200':
+          description: Dispositivo ${platform} de ${userID_Domain} deletado com sucesso (DB).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Dispositivo ${platform} de ${userID_Domain} deletado com sucesso (DB).
+        '400':
+          description: Requisição inválida, Algum dos campos da requisição faltando ou incorreto.
+        '500':
+          description: Falha interna ao tentar deletar os tokens no DB.
+
 
   /user/tokens: 
     post:
@@ -185,7 +230,7 @@ paths:
         '400':
           description: Requisição inválida.
 
-/firebaseDataPush:
+  /firebaseDataPush:
     post:
       tags:
         - FCM Push
@@ -222,14 +267,90 @@ paths:
                   success:
                     type: boolean
                     example: true
+                    description: Indica se o processamento foi executado e houve pelo menos um envio bem-sucedido.
                   message:
                     type: string
                     example: Notificação processada. Sucessos: 2, Falhas: 1.
                   results:
                     type: array
-                    description: Array detalhado com o status de processamento de cada Token FCM.
+                    description: Array detalhado com o status de processamento (sucesso ou falha) de cada Token FCM.
                     items:
                       type: object
                       properties:
                         token:
+                          type: string
+                          description: O Token FCM que foi processado.
+                          example: fzL-sQG4...
+                        platform:
+                          type: string
+                          enum: [Android, IOS, Extension] 
+                          description: A plataforma do dispositivo.
+                          example: Extension
+                        status:
+                          type: boolean
+                          description: 'Resultado do envio: TRUE para sucesso, FALSE para falha.'
+                          example: true
+                        messageId:
+                          type: string
+                          nullable: true
+                          description: ID da mensagem do Firebase (somente se status: true).
+                          example: projects/project-id/messages/1234567890
+                        errorCode:
+                          type: string
+                          nullable: true
+                          description: Código de erro do Firebase (somente se status: false). Ex: messaging/invalid-argument.
+                          example: messaging/registration-token-not-registered
+                        errorMessage:
+                          type: string
+                          nullable: true
+                          description: Mensagem de erro detalhada, se houver falha.
+                          example: The registration token is not a valid FCM registration token
+        '400':
+          description: Requisição inválida (parâmetros obrigatórios ausentes ou IDs iguais).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: userID_destino e userID_origem são obrigatórios.
+        '404':
+          description: Nenhum Token FCM ativo encontrado para o usuário de destino.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Nenhum token FCM ativo encontrado para o UserID de destino.
+        '500':
+          description: Falha no envio para TODOS os dispositivos (0 sucessos) ou falha interna do DB.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Falha ao enviar notificação para todos os dispositivos. Total de falhas: 3.
+                  results:
+                    type: array
+                    description: Retorna o relatório detalhado das falhas.
+                    items:
+                      type: object
+                      properties:
+                        token:
+                          type: string
+                        platform:
+                          type: string
+                        status:
+                          type: boolean
+                        errorCode:
+                          type: string
+                        errorMessage:
                           type: string

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import { checkUserTokensExist, FCMToken, getActiveTokensFromDB } from '../services/db.service'; 
+import { FCMToken, getActiveTokensFromDB } from '../services/db.service'; 
+import { getCurrentTimestamp } from '../utils/date';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ interface CheckUserRequest extends Request {
   };
 }
 router.post('/', async (req: CheckUserRequest, res: Response) => {
+    const timeStamp = getCurrentTimestamp();
     const { userID_Domain } = req.body; 
 
     if (!userID_Domain) {
@@ -25,27 +27,27 @@ router.post('/', async (req: CheckUserRequest, res: Response) => {
             const devices = userTokens.map(tokenRecord => ({
                 token: tokenRecord.token,
                 platform: tokenRecord.platform, // Retorna o nome da plataforma/dispositivo
-                last_active: tokenRecord.updatedAt // Informação extra útil
+                last_active: tokenRecord.updatedAt // Data da último atividade
             }));
 
             // Retorna o status 200 com os dados
             return res.status(200).send({ 
                 exists: true, 
                 userID: userID_Domain,
-                message: `Encontrados ${devices.length} dispositivo(s) ativo(s).`,
-                devices: devices // Lista de dispositivos e seus tokens/plataformas
+                message: `${timeStamp} Encontrados ${devices.length} dispositivo(s) ativo(s).`,
+                devices: devices 
             });
         } else {
             // Nenhum token ativo encontrado
             return res.status(404).send({ 
                 exists: false, 
-                message: `O usuário ${userID_Domain} não tem tokens ativos no DB.`,
+                message: `${timeStamp} O usuário ${userID_Domain} não tem tokens ativos no DB.`,
                 devices: []
             });
         }
     } catch (dbError) {
-        console.error(`[ERRO DB] Falha ao buscar os tokens para ${userID_Domain}:`, dbError);
-        return res.status(500).send({ error: "Falha interna ao buscar os dispositivos no DB." });
+        console.error(`${timeStamp} [ERRO DB] Falha ao buscar os tokens para ${userID_Domain}:`, dbError);
+        return res.status(500).send({ error: "Falha interna ao buscar os dispositivos no DB." , dbError});
     }
 });
 

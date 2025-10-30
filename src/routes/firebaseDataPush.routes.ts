@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { FirebaseError } from 'firebase-admin';
 import { getActiveTokensFromDB, FCMToken } from '../services/db.service'; 
 import { Platform } from '@prisma/client'; 
+import { getCurrentTimestamp } from '../utils/date';
 const router = Router();
 
 interface NotifyCallRequest extends Request {
@@ -23,6 +24,7 @@ interface PushResult {
 
 router.post('/', async (req: NotifyCallRequest, res: Response) => {
 
+    const timeStamp = getCurrentTimestamp();
     const { userID_destino, userID_origem } = req.body; 
 
     if (!userID_destino || !userID_origem) {
@@ -36,12 +38,12 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
     try {
         activeTokens = await getActiveTokensFromDB(userID_destino);
     } catch (dbError) {
-        console.error(`[ERRO DB] Falha ao buscar tokens para ${userID_destino}:`, dbError);
+        console.error(`${timeStamp} [ERRO DB] Falha ao buscar tokens para ${userID_destino}:`, dbError);
         return res.status(500).send({ error: "Falha interna ao buscar tokens no DB." });
     }
 
     if (activeTokens.length === 0) {
-        console.warn(`[AVISO] Nenhum token ativo encontrado para ${userID_destino}. Push ignorado.`);
+        console.warn(`${timeStamp} [AVISO] Nenhum token ativo encontrado para ${userID_destino}. Push ignorado.`);
         return res.status(404).send({ error: "Nenhum token FCM ativo encontrado para o UserID de destino." });
     }
 
@@ -84,7 +86,7 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
     results.forEach((result, index) => {
         const tokenData = activeTokens[index];
         if (!tokenData) {
-            console.error(`[ERRO INTERNO] Token ausente no array ativo para índice ${index}.`);
+            console.error(`${timeStamp} [ERRO INTERNO] Token ausente no array ativo para índice ${index}.`);
             return; 
         }
         const { token, platform  } = tokenData; 
@@ -97,7 +99,7 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
                 status: true,
                 messageId: result.value 
             });
-            console.log(`[PUSH SUCESSO] Notificação (${platform}) enviada para ${userID_destino}. ID Firebase: ${result.value}`);
+            console.log(`${timeStamp} [PUSH SUCESSO] Notificação (${platform}) enviada para ${userID_destino}. ID Firebase: ${result.value}`);
         } else {
             errorCount++;
             const error = result.reason as FirebaseError; 
@@ -112,7 +114,7 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
                 errorMessage: errorMessage
             });
             
-            console.error(`[ERRO FCM] Falha ao enviar para ${userID_destino}/${platform}: Código: ${errorCode}, Mensagem: ${errorMessage}`);
+            console.error(`${timeStamp} [ERRO FCM] Falha ao enviar para ${userID_destino}/${platform}: Código: ${errorCode}, Mensagem: ${errorMessage}`);
 
             //Marcar token para desativação ---
             if (errorCode === 'messaging/registration-token-not-registered' || errorCode === 'messaging/invalid-argument') {
@@ -135,13 +137,13 @@ router.post('/', async (req: NotifyCallRequest, res: Response) => {
     if (successCount > 0) {
         res.status(200).send({ 
             success: true, 
-            message: `Notificação processada. Sucessos: ${successCount}, Falhas: ${errorCount}.`,
+            message: `${timeStamp} Notificação processada. Sucessos: ${successCount}, Falhas: ${errorCount}.`,
             results: detailedResults 
         });
     } else {
         res.status(500).send({ 
             success: false, 
-            message: `Falha ao enviar notificação para todos os dispositivos. Total de falhas: ${errorCount}.`,
+            message: `${timeStamp} Falha ao enviar notificação para todos os dispositivos. Total de falhas: ${errorCount}.`,
             results: detailedResults 
         });
     }
